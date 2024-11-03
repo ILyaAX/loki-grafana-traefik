@@ -1,0 +1,67 @@
+version: "3.9"
+
+services:
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: grafana
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.logs.entrypoints=websecure"
+      - "traefik.http.routers.logs.rule=Host(`logs.<YOUR_HOST>`)"
+      - "traefik.http.routers.logs.tls=true"
+      - "traefik.http.routers.logs.tls.certresolver=letsEncrypt"
+      - "traefik.http.services.logs-service.loadbalancer.server.port=3000"
+      - "traefik.docker.network=webproxy"
+    environment:
+      - GF_PATHS_DATA=/var/lib/grafana/data
+      - GF_PATHS_LOGS=/var/log/grafana
+      - GF_PATHS_PLUGINS=/var/lib/grafana/plugins
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_USERS_ALLOW_ORG_CREATE=false
+    volumes:
+      - ./data/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - grafana-storage:/var/lib/grafana
+    expose:
+     - 3000
+    networks:
+      - loki
+      - webproxy
+
+  loki:
+    image: grafana/loki:main-061ac87
+    container_name: loki
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.loki.entrypoints=websecure"
+      - "traefik.http.routers.loki.rule=Host(`loki.<YOUR_HOST>`)"
+      - "traefik.http.routers.loki.tls=true"
+      - "traefik.http.routers.loki.tls.certresolver=letsEncrypt"
+      - "traefik.http.routers.loki.middlewares=loki-auth"
+      - "traefik.http.services.loki-service.loadbalancer.server.port=3100"
+      - "traefik.http.middlewares.loki-auth.basicauth.users=loki:$$apr1$$<---<HASH>--->"
+      - "traefik.docker.network=webproxy"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_storage:/loki
+      - ./data/local-config.yaml:/etc/loki/local-config.yaml
+    expose:
+      - 3100
+    networks:
+      - loki
+      - webproxy
+
+networks:
+  loki:
+    name: loki
+  webproxy:
+    name: webproxy
+
+volumes:
+  grafana-storage:
+    name: grafana-storage
+  loki_storage:
+    name: loki_storage
